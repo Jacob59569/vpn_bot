@@ -1,13 +1,16 @@
 import logging
 import asyncio
-import aiosqlite
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+TOKEN = "7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE"
 
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(
+    token=TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
 dp = Dispatcher()
 
 keyboard = ReplyKeyboardMarkup(
@@ -27,15 +30,7 @@ async def handle_message(message: types.Message):
             await message.answer("Ключи закончились 😢")
 
 async def get_one_key():
-    async with aiosqlite.connect("vless_keys.db") as db:
-        async with db.execute("SELECT id, key FROM keys LIMIT 1") as cursor:
-            row = await cursor.fetchone()
-            if row:
-                key_id, key = row
-                await db.execute("DELETE FROM keys WHERE id = ?", (key_id,))
-                await db.commit()
-                return key
-    return None
+    return "vless://c96be059-f449-4452-9ee9-a0168cfee87c@37.252.10.195:34755?type=tcp&security=reality&fp=firefox&pbk=6MLVXwtbQrxIzwai3n2jr4McFVB9qBLd5RTn9Fx8bDU&sni=yahoo.com&sid=a8ff4915&spx=%2F#"
 
 async def main():
     logging.basicConfig(level=logging.INFO)
