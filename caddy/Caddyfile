@@ -1,0 +1,10 @@
+shieldvpn.ru {
+  encode gzip
+  tls internal
+
+  reverse_proxy /vless-grpc  vpn_xray:10000 {
+    transport http {
+      versions h2c
+    }
+  }
+}

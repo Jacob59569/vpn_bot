@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  app:
+    build: ./app
+    container_name: vpn_app
+    environment:
+      - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
+    volumes:
+      - ./xray/config.json:/app/xray/config.json
+    depends_on:
+      - xray
+    networks:
+      - vpn_net
+
+  xray:
+    image: teddysun/xray
+    container_name: vpn_xray
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json
+    ports:
+      - "10000:10000"
+    networks:
+      - vpn_net
+
+  caddy:
+    image: caddy:2.7.6
+    container_name: vpn_caddy
+    ports:
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - vpn_net
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  vpn_net:
+    driver: bridge
