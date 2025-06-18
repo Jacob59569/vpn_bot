@@ -27,6 +27,7 @@ services:
     image: caddy:2.7.6
     container_name: vpn_caddy
     ports:
+      - "80:80"
       - "443:443"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
