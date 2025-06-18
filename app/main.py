@@ -66,18 +66,20 @@ def add_user_to_xray_config(user_id: str, email: str):
 
 @app.post("/generate")
 async def generate_key(user_info: dict):
+    # ... (код генерации user_id и добавления в конфиг остается тем же) ...
     user_id = str(uuid.uuid4())
     telegram_user_id = user_info.get("telegram_id", "unknown_user")
     email = f"user_{telegram_user_id}"
     log.info(f"Generating key for Telegram user {telegram_user_id}")
-
     add_user_to_xray_config(user_id=user_id, email=email)
 
+    # --- НОВАЯ СТРОКА ДЛЯ ГЕНЕРАЦИИ ССЫЛКИ ---
     vless_link = (
         f"vless://{user_id}@{VLESS_SERVER_ADDRESS}:{VLESS_SERVER_PORT}?"
-        "type=ws&security=tls&path=%2F#_blank"
+        f"type=ws&security=tls&path=%2Fvless-ws&host={VLESS_SERVER_ADDRESS}"
         f"#{VLESS_REMARKS}"
     )
+
     return vless_link
 
 

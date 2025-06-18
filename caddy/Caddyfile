@@ -1,10 +1,22 @@
 shieldvpn.ru {
-  encode gzip
-  tls internal
+    # Включаем логирование
+    log
 
-  reverse_proxy /vless-grpc  vpn_xray:10000 {
-    transport http {
-      versions h2c
+    # Отдаем простую страницу-заглушку, чтобы ваш домен не выглядел пустым
+    @fallback not path /vless-ws*
+    handle @fallback {
+        respond "Hello! This is a private server." 200
     }
-  }
+
+    # Перенаправляем запросы по секретному пути на Xray
+    handle_path /vless-ws* {
+        reverse_proxy vpn_xray:10000 {
+            transport http {
+                versions h1
+            }
+        }
+    }
+
+    # Включаем автоматическое управление TLS-сертификатами
+    tls jacob.tokarev@icloud.com
 }
