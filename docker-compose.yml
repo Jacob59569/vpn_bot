@@ -8,10 +8,10 @@ services:
       - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
     volumes:
       - ./xray/config.json:/app/xray/config.json
-    ports:
-      - "8000:8000"
     depends_on:
       - xray
+    ports:
+      - "8000:8000"
     networks:
       - vpn_net
 

@@ -1,29 +1,38 @@
 import os
-import requests
-from telebot import TeleBot, types
+import asyncio
+import logging
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+import aiohttp
+
+API_URL = "http://localhost:8000/generate"
+
+logging.basicConfig(level=logging.INFO)
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-bot = TeleBot(TOKEN)
+bot = Bot(token=TOKEN)
+dp = Dispatcher(bot)
 
-@bot.message_handler(commands=['start'])
-def start_handler(message):
-    markup = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton(text="Получить VLESS ключ", callback_data="get_vless")
-    markup.add(btn)
-    bot.send_message(message.chat.id, "Нажми кнопку, чтобы получить ключ:", reply_markup=markup)
+@dp.message_handler(commands=["start"])
+async def start_handler(message: types.Message):
+    keyboard = InlineKeyboardMarkup()
+    btn = InlineKeyboardButton("Получить VLESS ключ", callback_data="get_vless")
+    keyboard.add(btn)
+    await message.answer("Нажми кнопку, чтобы получить ключ:", reply_markup=keyboard)
 
-@bot.callback_query_handler(func=lambda call: call.data == "get_vless")
-def callback_handler(call):
-    bot.answer_callback_query(call.id)  # обязательно подтверждаем callback
+@dp.callback_query_handler(lambda c: c.data == "get_vless")
+async def handle_vless(callback_query: types.CallbackQuery):
+    await bot.answer_callback_query(callback_query.id)
+    async with aiohttp.ClientSession() as session:
+        async with session.post(API_URL) as resp:
+            if resp.status == 200:
+                text = await resp.text()
+                await bot.send_message(callback_query.from_user.id, text)
+            else:
+                await bot.send_message(callback_query.from_user.id, "Ошибка генерации ключа")
 
-    try:
-        res = requests.post("http://localhost:8000/generate")
-        res.raise_for_status()
-        bot.send_message(call.message.chat.id, res.text)
-    except Exception as e:
-        print(f"Ошибка при вызове API: {e}")
-        bot.send_message(call.message.chat.id, "Ошибка генерации ключа")
+async def main():
+    await dp.start_polling()
 
 if __name__ == "__main__":
-    print("Бот запущен...")
-    bot.infinity_polling()
+    asyncio.run(main())
