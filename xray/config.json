@@ -1,27 +1,32 @@
 {
-  "log": {
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "port": 10000,
-      "protocol": "vless",
-      "settings": {
-        "clients": [],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "grpc",
-        "grpcSettings": {
-          "serviceName": "vless-grpc"
-        },
-        "security": "tls"
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom"
-    }
-  ]
+    "log": {
+        "loglevel": "warning"
+    },
+    "inbounds": [
+        {
+            "port": 10000,
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "0e4acbeb-8b73-4201-a74a-bc9ea9e40f27",
+                        "email": "user_629946313"
+                    }
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "grpc",
+                "grpcSettings": {
+                    "serviceName": "vless-grpc"
+                },
+                "security": "tls"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
 }
