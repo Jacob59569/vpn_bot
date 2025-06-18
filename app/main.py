@@ -32,24 +32,11 @@ async def start(message: types.Message):
     await message.answer("Нажми кнопку, чтобы получить ключ:", reply_markup=keyboard)
 
 # callback на кнопку
-@router.callback_query(lambda c: c.data == "get_vless")
-async def handle_vless(callback_query: types.CallbackQuery):
-    print(f"Callback received from user {callback_query.from_user.id}")
-    await bot.answer_callback_query(callback_query.id)
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.post(API_URL) as resp:
-                print(f"API responded with status {resp.status}")
-                text = await resp.text()
-                print(f"API response: {text}")
-                if resp.status == 200:
-                    await bot.send_message(callback_query.from_user.id, text)
-                else:
-                    await bot.send_message(callback_query.from_user.id, "Ошибка генерации ключа")
-        except Exception as e:
-            print(f"Exception in callback: {e}")
-            await bot.send_message(callback_query.from_user.id, f"Ошибка API: {e}")
+@router.callback_query(lambda c: True)  # Ловим все callback
+async def any_callback(call: types.CallbackQuery):
+    print("Callback received!")
+    await bot.answer_callback_query(call.id)
+    await call.message.answer("Callback сработал")
 
 # Подключаем router к dispatcher
 dp.include_router(router)
