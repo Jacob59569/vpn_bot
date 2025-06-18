@@ -1,5 +1,15 @@
 FROM python:3.11-slim
+
 WORKDIR /app
-COPY . .
+
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-CMD ["python", "main.py"]
+
+# Копируем весь остальной код
+COPY . .
+
+# Даем права на исполнение нашему скрипту
+RUN chmod +x ./start.sh
+
+# Запускаем контейнер с помощью нашего скрипта
+CMD ["./start.sh"]
