@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from utils import add_client_to_config, generate_vless_link
+from utils import add_client_to_config
 
 app = FastAPI()
 
