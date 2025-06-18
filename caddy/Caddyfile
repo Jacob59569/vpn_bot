@@ -10,10 +10,13 @@ shieldvpn.ru {
 
     # Перенаправляем запросы по секретному пути на Xray
     handle_path /vless-ws* {
+        # Используем websocket пресет и указываем заголовки
         reverse_proxy vpn_xray:10000 {
-            transport http {
-                versions h1
-            }
+            header_up Host {http.request.host}
+            header_up X-Real-IP {http.request.remote}
+            header_up X-Forwarded-For {http.request.remote}
+            header_up X-Forwarded-Port {http.request.port}
+            header_up X-Forwarded-Proto {http.request.scheme}
         }
     }
 
