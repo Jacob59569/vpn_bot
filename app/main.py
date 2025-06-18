@@ -3,48 +3,56 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram import Router
-
-import aiohttp
+from aiogram import F
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-API_URL = "http://localhost:8000/generate"
 
-logging.basicConfig(level=logging.INFO)
+# Настраиваем логирование, чтобы видеть все в консоли
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+log = logging.getLogger(__name__)
 
 # Инициализация
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-router = Router()
 
-# /start
-@router.message(CommandStart())
-async def start(message: types.Message):
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Получить VLESS ключ", callback_data="get_vless")]
-        ]
-    )
-    await message.answer("Нажми кнопку, чтобы получить ключ:", reply_markup=keyboard)
 
-# callback на кнопку
-@router.callback_query(lambda c: True)  # Ловим все callback
-async def any_callback(call: types.CallbackQuery):
-    print("Callback received!")
-    await bot.answer_callback_query(call.id)
-    await call.message.answer("Callback сработал")
+# Обработчик команды /start
+@dp.message(CommandStart())
+async def command_start_handler(message: types.Message):
+    log.info(f"Received /start from user {message.from_user.id}")
+    kb = [
+        [types.InlineKeyboardButton(text="Нажми меня!", callback_data="test_button_pressed")]
+    ]
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
+    await message.answer("Привет! Нажми на кнопку:", reply_markup=keyboard)
 
-# Подключаем router к dispatcher
-dp.include_router(router)
 
-# Запуск
+# Обработчик ЛЮБОГО нажатия на инлайн-кнопку
+@dp.callback_query(F.data)  # F.data ловит любой callback, у которого есть data
+async def button_press_handler(call: types.CallbackQuery):
+    log.info(f"Received callback '{call.data}' from user {call.from_user.id}")
+
+    # Обязательно "отвечаем" на callback, чтобы у пользователя пропали "часики" на кнопке
+    await call.answer(text="Нажатие обработано!", show_alert=False)
+
+    # Отправляем новое сообщение в чат
+    await call.message.answer(f"Вы нажали на кнопку! Данные: {call.data}")
+
+
+# Главная функция запуска
 async def main():
+    log.info("Starting bot...")
+    # Удаляем вебхук и ПРОПУСКАЕМ все старые обновления
     await bot.delete_webhook(drop_pending_updates=True)
+    # Запускаем polling, передавая боту dispatcher
     await dp.start_polling(bot)
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Bot stopped!")
