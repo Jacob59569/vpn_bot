@@ -8,6 +8,7 @@ services:
       - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
     volumes:
       - ./xray/config.json:/app/config.json
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8000:8000"  # для API
     networks:

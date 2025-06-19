@@ -4,6 +4,7 @@ import logging
 import aiohttp
 import json
 import uuid
+import docker
 
 # --- Импорты для FastAPI ---
 from fastapi import FastAPI, HTTPException
@@ -38,30 +39,62 @@ app = FastAPI()
 
 
 def add_user_to_xray_config(user_id: str, email: str):
+    """
+    Добавляет нового пользователя в JSON-конфигурацию Xray и перезапускает
+    контейнер xray для применения изменений.
+    """
     try:
-        # Используем with open для безопасной работы с файлом
+        # Шаг 1: Чтение и модификация файла config.json
         with open(XRAY_CONFIG_PATH, 'r+') as f:
             config = json.load(f)
+
+            # Находим настройки клиентов. Предполагаем, что inbound один.
             inbound_settings = config['inbounds'][0]['settings']
 
-            # Проверяем, нет ли уже такого пользователя
-            client_exists = any(client['id'] == user_id for client in inbound_settings.get('clients', []))
-            if client_exists:
-                log.info(f"User with ID {user_id} already exists in xray config.")
+            # Убеждаемся, что ключ 'clients' существует
+            if 'clients' not in inbound_settings:
+                inbound_settings['clients'] = []
+
+            # Проверяем, существует ли уже клиент с таким ID
+            # Это маловероятно с UUID, но это хорошая практика
+            if any(client['id'] == user_id for client in inbound_settings['clients']):
+                log.warning(f"Client with ID {user_id} already exists. Skipping add.")
                 return
 
             # Добавляем нового клиента
             new_client = {"id": user_id, "email": email}
-            inbound_settings.setdefault('clients', []).append(new_client)
+            inbound_settings['clients'].append(new_client)
 
+            # Перезаписываем файл с обновленной конфигурацией
             f.seek(0)
             json.dump(config, f, indent=4)
             f.truncate()
-            log.info(f"Successfully added user {email} ({user_id}) to xray config.")
+            log.info(f"Successfully updated xray config file for user {email} ({user_id}).")
 
     except (FileNotFoundError, json.JSONDecodeError, KeyError, IndexError) as e:
-        log.error(f"Failed to update Xray config: {e}")
-        raise HTTPException(status_code=500, detail="Could not update Xray configuration.")
+        log.error(f"Failed to read or update Xray config file: {e}")
+        # Если не удалось обновить конфиг, нет смысла перезапускать xray
+        raise HTTPException(status_code=500, detail="Error updating Xray configuration file.")
+
+    # Шаг 2: Перезапуск контейнера Xray для применения изменений
+    try:
+        log.info("Attempting to restart 'vpn_xray' container to apply new config...")
+        # Подключаемся к Docker-демону через сокет
+        client = docker.from_env()
+        # Находим контейнер по имени, указанному в docker-compose.yml
+        container = client.containers.get('vpn_xray')
+        container.restart()
+        log.info("Container 'vpn_xray' restarted successfully.")
+    except docker.errors.NotFound:
+        log.error(
+            "Container 'vpn_xray' not found. Cannot apply new config. Check container_name in docker-compose.yml.")
+        # Можно продолжать работу, но ключ не будет активен до ручного перезапуска
+    except docker.errors.APIError as e:
+        log.error(f"Docker API error while restarting 'vpn_xray': {e}")
+        # Аналогично, ключ не будет активен
+    except Exception as e:
+        # Ловим любые другие непредвиденные ошибки
+        log.error(f"An unexpected error occurred while restarting 'vpn_xray': {e}")
 
 
 @app.post("/generate")
