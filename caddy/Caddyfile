@@ -1,17 +1,15 @@
 shieldvpn.ru {
     log
 
-    # Используем директиву handle, которая не меняет URI
-    handle /vless-ws* {
-        # reverse_proxy просто указывает на адрес Xray.
-        # Он передаст URI /vless-ws без изменений.
-        reverse_proxy vpn_xray:10000
-    }
-
-    # Все остальные запросы будут обработаны здесь.
-    # Это будет нашей "заглушкой".
-    handle {
-        respond "Welcome." 200
+    # Проксируем gRPC трафик на Xray
+    # Указываем, что это h2c (HTTP/2 Cleartext), так как TLS терминируется на Caddy
+    @grpc host shieldvpn.ru
+    handle @grpc {
+        reverse_proxy h2c://vpn_xray:10000 {
+            transport http {
+                versions 2
+            }
+        }
     }
 
     tls jacob.tokarev@icloud.com

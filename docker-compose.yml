@@ -43,6 +43,3 @@ volumes:
 networks:
   vpn_net:
     driver: bridge
-    driver_opts:
-      # Устанавливаем MTU для всей внутренней сети Docker
-      com.docker.network.driver.mtu: "1420"

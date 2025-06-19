@@ -76,7 +76,7 @@ async def generate_key(user_info: dict):
     # --- НОВАЯ СТРОКА ДЛЯ ГЕНЕРАЦИИ ССЫЛКИ ---
     vless_link = (
         f"vless://{user_id}@{VLESS_SERVER_ADDRESS}:{VLESS_SERVER_PORT}?"
-        f"type=ws&security=tls&path=%2Fvless-ws&host={VLESS_SERVER_ADDRESS}&mtu=1420"
+        f"type=grpc&security=tls&serviceName=vless-grpc&host={VLESS_SERVER_ADDRESS}"
         f"#{VLESS_REMARKS}"
     )
 

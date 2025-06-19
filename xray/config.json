@@ -11,10 +11,10 @@
         "decryption": "none"
       },
       "streamSettings": {
-        "network": "ws",
+        "network": "grpc",
         "security": "none",
-        "wsSettings": {
-          "path": "/vless-ws"
+        "grpcSettings": {
+          "serviceName": "vless-grpc"
         }
       }
     }
