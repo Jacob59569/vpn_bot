@@ -1,14 +1,28 @@
 shieldvpn.ru {
     log
 
-    # Проксируем gRPC трафик на Xray
-    # Указываем, что это h2c (HTTP/2 Cleartext), так как TLS терминируется на Caddy
-    @grpc host shieldvpn.ru
-    handle @grpc {
-        reverse_proxy h2c://vpn_xray:10000 {
-            transport http {
-                versions 2
+    # Устанавливаем корневую папку для сайта
+    root * /srv/www
+
+    # Включаем сжатие для ускорения загрузки сайта
+    encode zstd gzip
+
+    # Используем route для четкого порядка правил
+    route {
+        # Сначала проверяем, является ли запрос gRPC-запросом.
+        # Caddy определяет это по заголовку Content-Type: application/grpc
+        @grpc header Content-Type application/grpc*
+        handle @grpc {
+            reverse_proxy h2c://vpn_xray:10000 {
+                transport http {
+                    versions 2
+                }
             }
+        }
+
+        # Если это не gRPC, то обрабатываем как обычный файловый сервер
+        handle {
+            file_server
         }
     }
 
