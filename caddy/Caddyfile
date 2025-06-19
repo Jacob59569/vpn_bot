@@ -6,13 +6,10 @@ shieldvpn.ru {
         respond "Hello! This is a private server." 200
     }
 
-    @ws_path {
-        path /vless-ws*
-    }
-    handle @ws_path {
+    handle_path /vless-ws* {
         reverse_proxy vpn_xray:10000 {
             transport http {
-                versions h2c
+                versions 1.1
             }
             header_up Host {http.request.host}
             header_up X-Real-IP {http.request.remote}
