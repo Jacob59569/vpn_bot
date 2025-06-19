@@ -1,23 +1,21 @@
 shieldvpn.ru {
+    # Включаем логирование, это полезно для отладки
     log
 
+    # Отдаем простую страницу-заглушку на все запросы,
+    # КРОМЕ нашего секретного пути. Это маскировка.
     @fallback not path /vless-ws*
     handle @fallback {
-        respond "Hello! This is a private server." 200
+        respond "Welcome." 200
     }
 
+    # Обрабатываем только наш секретный путь и проксируем его на Xray
     handle_path /vless-ws* {
-        reverse_proxy vpn_xray:10000 {
-            transport http {
-                versions h1
-            }
-            header_up Host {http.request.host}
-            header_up X-Real-IP {http.request.remote}
-            header_up X-Forwarded-For {http.request.remote}
-            header_up X-Forwarded-Port {http.request.port}
-            header_up X-Forwarded-Proto {http.request.scheme}
-        }
+        # reverse_proxy просто указывает на адрес Xray.
+        # Caddy автоматически обработает WebSocket "upgrade" запросы.
+        reverse_proxy vpn_xray:10000
     }
 
+    # Укажите вашу почту для получения SSL-сертификатов
     tls jacob.tokarev@icloud.com
 }
