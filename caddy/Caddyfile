@@ -1,21 +1,18 @@
 shieldvpn.ru {
-    # Включаем логирование, это полезно для отладки
     log
 
-    # Отдаем простую страницу-заглушку на все запросы,
-    # КРОМЕ нашего секретного пути. Это маскировка.
-    @fallback not path /vless-ws*
-    handle @fallback {
-        respond "Welcome." 200
-    }
-
-    # Обрабатываем только наш секретный путь и проксируем его на Xray
-    handle_path /vless-ws* {
+    # Используем директиву handle, которая не меняет URI
+    handle /vless-ws* {
         # reverse_proxy просто указывает на адрес Xray.
-        # Caddy автоматически обработает WebSocket "upgrade" запросы.
+        # Он передаст URI /vless-ws без изменений.
         reverse_proxy vpn_xray:10000
     }
 
-    # Укажите вашу почту для получения SSL-сертификатов
+    # Все остальные запросы будут обработаны здесь.
+    # Это будет нашей "заглушкой".
+    handle {
+        respond "Welcome." 200
+    }
+
     tls jacob.tokarev@icloud.com
 }
