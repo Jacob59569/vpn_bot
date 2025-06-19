@@ -9,7 +9,7 @@ shieldvpn.ru {
     handle_path /vless-ws* {
         reverse_proxy vpn_xray:10000 {
             transport http {
-                versions 1.1
+                versions h1
             }
             header_up Host {http.request.host}
             header_up X-Real-IP {http.request.remote}
