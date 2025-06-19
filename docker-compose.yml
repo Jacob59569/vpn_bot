@@ -33,9 +33,7 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - # Монтируем всю папку caddy в /etc/caddy, чтобы Caddy видел Caddyfile
       - ./caddy:/etc/caddy
-      - # Создаем пустую папку для сайта и монтируем туда нашу папку caddy
       - ./caddy:/srv/www
       - caddy_data:/data
       - caddy_config:/config
