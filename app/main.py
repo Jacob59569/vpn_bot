@@ -5,6 +5,7 @@ import aiohttp
 import json
 import uuid
 import docker
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # --- Импорты для FastAPI ---
 from fastapi import FastAPI, HTTPException
@@ -138,14 +139,47 @@ async def generate_key(user_info: dict):
 bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
 
+# --- НОВАЯ ЛОГИКА: Создание постоянной клавиатуры ---
+def get_main_keyboard():
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="🔑 Получить VLESS ключ")
+    builder.button(text="ℹ️ О боте")
+    # Указываем, чтобы кнопки располагались по одной в ряду
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
 
+# --- Обработчики ---
+
+# Обработчик команды /start
 @dp.message(CommandStart())
 async def command_start_handler(message: types.Message):
     log.info(f"Received /start from user {message.from_user.id} ({message.from_user.full_name})")
-    kb = [[types.InlineKeyboardButton(text="🔑 Получить VLESS ключ", callback_data="get_vless_key")]]
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
-    await message.answer("Привет! Нажми на кнопку, чтобы получить новый ключ доступа:", reply_markup=keyboard)
+    await message.answer(
+        "Добро пожаловать! 👋\n\n"
+        "Я ваш личный помощник для получения доступа к VPN. "
+        "Используйте кнопки меню внизу для навигации.",
+        reply_markup=get_main_keyboard() # <--- Отправляем постоянную клавиатуру
+    )
 
+# НОВЫЙ ОБРАБОТЧИК для текстовой кнопки "Получить VLESS ключ"
+@dp.message(F.text == "🔑 Получить VLESS ключ")
+async def request_key_handler(message: types.Message):
+    # Здесь мы создаем инлайн-кнопку для подтверждения, как раньше
+    kb = [[types.InlineKeyboardButton(text="Да, сгенерировать ключ", callback_data="get_vless_key")]]
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
+    await message.answer(
+        "Вы уверены, что хотите получить ключ? "
+        "Если у вас уже есть ключ, будет выдан он же.",
+        reply_markup=keyboard
+    )
+
+# НОВЫЙ ОБРАБОТЧИК для кнопки "О боте"
+@dp.message(F.text == "ℹ️ О боте")
+async def about_bot_handler(message: types.Message):
+    await message.answer(
+        "<b>ShieldVPN Bot</b>\n\n"
+        "Этот бот создан для автоматической выдачи ключей доступа к приватному VPN-сервису."
+    )
 
 @dp.callback_query(F.data == "get_vless_key")
 async def get_vless_key_handler(call: types.CallbackQuery):
