@@ -31,6 +31,7 @@ VLESS_SERVER_PORT = 443
 VLESS_REMARKS = "ShieldVPN"
 # --- ИСПРАВЛЕННЫЙ ПУТЬ ---
 XRAY_CONFIG_PATH = "/app/config.json"  # Путь к конфигу Xray, который мы смонтировали
+USER_DB_PATH = "/app/user_database.json"
 
 # ==========================================================
 #                  ЧАСТЬ 1: ЛОГИКА API и VLESS
@@ -38,82 +39,97 @@ XRAY_CONFIG_PATH = "/app/config.json"  # Путь к конфигу Xray, кот
 app = FastAPI()
 
 
-def add_user_to_xray_config(user_id: str, email: str):
-    """
-    Добавляет нового пользователя в JSON-конфигурацию Xray и перезапускает
-    контейнер xray для применения изменений.
-    """
+def get_user_db():
+    """Читает и возвращает базу данных пользователей."""
     try:
-        # Шаг 1: Чтение и модификация файла config.json
+        with open(USER_DB_PATH, 'r') as f:
+            # Если файл пуст, возвращаем пустой словарь
+            content = f.read()
+            if not content:
+                return {}
+            return json.loads(content)
+    except FileNotFoundError:
+        # Если файла нет, создаем его
+        with open(USER_DB_PATH, 'w') as f:
+            json.dump({}, f)
+        return {}
+
+
+def save_user_db(db):
+    """Сохраняет базу данных пользователей."""
+    with open(USER_DB_PATH, 'w') as f:
+        json.dump(db, f, indent=4)
+
+
+def add_user_to_xray_config(user_uuid: str, email: str):
+    """Добавляет нового пользователя в конфиг Xray и перезапускает сервис."""
+    try:
         with open(XRAY_CONFIG_PATH, 'r+') as f:
             config = json.load(f)
-
-            # Находим настройки клиентов. Предполагаем, что inbound один.
             inbound_settings = config['inbounds'][0]['settings']
-
-            # Убеждаемся, что ключ 'clients' существует
             if 'clients' not in inbound_settings:
                 inbound_settings['clients'] = []
 
-            # Проверяем, существует ли уже клиент с таким ID
-            # Это маловероятно с UUID, но это хорошая практика
-            if any(client['id'] == user_id for client in inbound_settings['clients']):
-                log.warning(f"Client with ID {user_id} already exists. Skipping add.")
-                return
-
-            # Добавляем нового клиента
-            new_client = {"id": user_id, "email": email}
+            # Добавляем нового клиента (мы уже знаем, что его там нет)
+            new_client = {"id": user_uuid, "email": email}
             inbound_settings['clients'].append(new_client)
 
-            # Перезаписываем файл с обновленной конфигурацией
             f.seek(0)
             json.dump(config, f, indent=4)
             f.truncate()
-            log.info(f"Successfully updated xray config file for user {email} ({user_id}).")
+            log.info(f"Successfully added user {email} ({user_uuid}) to xray config.")
+    except Exception as e:
+        log.error(f"Failed to update Xray config file: {e}")
+        raise HTTPException(status_code=500, detail="Could not update Xray configuration.")
 
-    except (FileNotFoundError, json.JSONDecodeError, KeyError, IndexError) as e:
-        log.error(f"Failed to read or update Xray config file: {e}")
-        # Если не удалось обновить конфиг, нет смысла перезапускать xray
-        raise HTTPException(status_code=500, detail="Error updating Xray configuration file.")
-
-    # Шаг 2: Перезапуск контейнера Xray для применения изменений
     try:
-        log.info("Attempting to restart 'vpn_xray' container to apply new config...")
-        # Подключаемся к Docker-демону через сокет
+        log.info("Restarting 'vpn_xray' container to apply new config...")
         client = docker.from_env()
-        # Находим контейнер по имени, указанному в docker-compose.yml
         container = client.containers.get('vpn_xray')
         container.restart()
         log.info("Container 'vpn_xray' restarted successfully.")
-    except docker.errors.NotFound:
-        log.error(
-            "Container 'vpn_xray' not found. Cannot apply new config. Check container_name in docker-compose.yml.")
-        # Можно продолжать работу, но ключ не будет активен до ручного перезапуска
-    except docker.errors.APIError as e:
-        log.error(f"Docker API error while restarting 'vpn_xray': {e}")
-        # Аналогично, ключ не будет активен
     except Exception as e:
-        # Ловим любые другие непредвиденные ошибки
-        log.error(f"An unexpected error occurred while restarting 'vpn_xray': {e}")
+        log.error(f"Failed to restart xray container: {e}")
+        # Продолжаем, но ключ может быть неактивен
 
 
-@app.post("/generate")
-async def generate_key(user_info: dict):
-    # ... (код генерации user_id и добавления в конфиг остается тем же) ...
-    user_id = str(uuid.uuid4())
-    telegram_user_id = user_info.get("telegram_id", "unknown_user")
-    email = f"user_{telegram_user_id}"
-    log.info(f"Generating key for Telegram user {telegram_user_id}")
-    add_user_to_xray_config(user_id=user_id, email=email)
-
-    # --- НОВАЯ СТРОКА ДЛЯ ГЕНЕРАЦИИ ССЫЛКИ ---
-    vless_link = (
-        f"vless://{user_id}@{VLESS_SERVER_ADDRESS}:{VLESS_SERVER_PORT}?"
+def format_vless_link(user_uuid: str):
+    """Форматирует VLESS-ссылку по UUID."""
+    return (
+        f"vless://{user_uuid}@{VLESS_SERVER_ADDRESS}:{VLESS_SERVER_PORT}?"
         f"type=grpc&security=tls&serviceName=vless-grpc&host={VLESS_SERVER_ADDRESS}"
         f"#{VLESS_REMARKS}"
     )
 
-    return vless_link
+
+@app.post("/generate")
+async def generate_key(user_info: dict):
+    telegram_id_str = str(user_info.get("telegram_id"))
+
+    # Загружаем нашу "базу данных"
+    user_db = get_user_db()
+
+    # ПРОВЕРКА: есть ли уже ключ у этого пользователя?
+    if telegram_id_str in user_db:
+        user_uuid = user_db[telegram_id_str]
+        log.info(f"User {telegram_id_str} already has a key. Returning existing UUID: {user_uuid}")
+        # Просто возвращаем существующий ключ, ничего не меняя и не перезапуская
+        return format_vless_link(user_uuid)
+    else:
+        # СОЗДАНИЕ НОВОГО КЛЮЧА
+        log.info(f"User {telegram_id_str} does not have a key. Generating a new one.")
+        user_uuid = str(uuid.uuid4())
+        email = f"user_{telegram_id_str}"
+
+        # 1. Добавляем пользователя в конфиг Xray и перезапускаем
+        add_user_to_xray_config(user_uuid=user_uuid, email=email)
+
+        # 2. Сохраняем связку telegram_id -> vless_uuid в нашу базу
+        user_db[telegram_id_str] = user_uuid
+        save_user_db(user_db)
+
+        # 3. Возвращаем новый ключ
+        return format_vless_link(user_uuid)
 
 
 # ==========================================================

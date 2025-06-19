@@ -9,6 +9,7 @@ services:
     volumes:
       - ./xray/config.json:/app/config.json
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./app/user_database.json:/app/user_database.json
     ports:
       - "8000:8000"  # для API
     networks:
