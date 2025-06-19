@@ -17,6 +17,10 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram import F
 
+# --- НОВЫЕ ИМПОРТЫ для состояний (FSM) ---
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
 # ==========================================================
 #                  КОНФИГУРАЦИЯ
 # ==========================================================
@@ -33,6 +37,10 @@ VLESS_REMARKS = "ShieldVPN"
 # --- ИСПРАВЛЕННЫЙ ПУТЬ ---
 XRAY_CONFIG_PATH = "/app/config.json"  # Путь к конфигу Xray, который мы смонтировали
 USER_DB_PATH = "/app/user_database.json"
+
+# --- НОВИНКА: Определяем состояния для нашего FSM ---
+class GenKeyStates(StatesGroup):
+    waiting_for_password = State() # Состояние ожидания пароля
 
 # ==========================================================
 #                  ЧАСТЬ 1: ЛОГИКА API и VLESS
@@ -152,26 +160,56 @@ def get_main_keyboard():
 
 # Обработчик команды /start
 @dp.message(CommandStart())
-async def command_start_handler(message: types.Message):
+async def command_start_handler(message: types.Message, state: FSMContext):
+    # Сбрасываем состояние пользователя, если он был в процессе ввода пароля
+    await state.clear()
     log.info(f"Received /start from user {message.from_user.id} ({message.from_user.full_name})")
     await message.answer(
         "Добро пожаловать! 👋\n\n"
         "Я ваш личный помощник для получения доступа к VPN. "
         "Используйте кнопки меню внизу для навигации.",
-        reply_markup=get_main_keyboard() # <--- Отправляем постоянную клавиатуру
+        reply_markup=get_main_keyboard()
     )
 
 # НОВЫЙ ОБРАБОТЧИК для текстовой кнопки "Получить VLESS ключ"
 @dp.message(F.text == "🔑 Получить VLESS ключ")
-async def request_key_handler(message: types.Message):
-    # Здесь мы создаем инлайн-кнопку для подтверждения, как раньше
-    kb = [[types.InlineKeyboardButton(text="Да, сгенерировать ключ", callback_data="get_vless_key")]]
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
+async def request_key_handler(message: types.Message, state: FSMContext):
+    log.info(f"User {message.from_user.id} requested a key, asking for password.")
+    # Устанавливаем состояние "ожидание пароля" для этого пользователя
+    await state.set_state(GenKeyStates.waiting_for_password)
     await message.answer(
-        "Вы уверены, что хотите получить ключ? "
-        "Если у вас уже есть ключ, будет выдан он же.",
-        reply_markup=keyboard
+        "Для получения ключа, пожалуйста, введите пароль:",
+        # Убираем клавиатуру, чтобы пользователь не нажал что-то другое
+        reply_markup=types.ReplyKeyboardRemove()
     )
+
+
+@dp.message(GenKeyStates.waiting_for_password)
+async def password_entered_handler(message: types.Message, state: FSMContext):
+    # Захардкодим пароль. В реальном проекте его лучше брать из переменных окружения.
+    CORRECT_PASSWORD = "1234"
+
+    if message.text == CORRECT_PASSWORD:
+        log.info(f"User {message.from_user.id} entered correct password.")
+        # Пароль верный, сбрасываем состояние
+        await state.clear()
+
+        # Запускаем логику выдачи ключа, отправляя инлайн-кнопку для подтверждения
+        kb = [[types.InlineKeyboardButton(text="Да, подтверждаю", callback_data="get_vless_key")]]
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
+        await message.answer(
+            "✅ Пароль верный! Нажмите, чтобы сгенерировать ваш ключ.",
+            reply_markup=keyboard
+        )
+    else:
+        log.warning(f"User {message.from_user.id} entered incorrect password.")
+        # Пароль неверный, сбрасываем состояние и возвращаем главное меню
+        await state.clear()
+        await message.answer(
+            "❌ Неверный пароль. Попробуйте еще раз.",
+            reply_markup=get_main_keyboard()  # Возвращаем основную клавиатуру
+        )
+
 
 # НОВЫЙ ОБРАБОТЧИК для кнопки "О боте"
 @dp.message(F.text == "ℹ️ О боте")
