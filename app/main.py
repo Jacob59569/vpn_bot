@@ -86,17 +86,25 @@ async def restart_xray_container():
         return False
 
 
-def add_user_to_xray_config(user_id: str, email: str) -> bool:
+def add_user_to_xray_config(user_id: str, short_id: str, email: str) -> bool:
+    """Добавляет нового пользователя И ЕГО SHORT_ID в JSON-конфигурацию Xray."""
     try:
         with open(XRAY_CONFIG_PATH, 'r+') as f:
             config = json.load(f)
             inbound_settings = config['inbounds'][0]['settings']
+            reality_settings = config['inbounds'][0]['streamSettings']['realitySettings']
+
+            # Добавляем нового клиента
             new_client = {"id": user_id, "email": email}
             inbound_settings.setdefault('clients', []).append(new_client)
+
+            # Добавляем новый shortId
+            reality_settings.setdefault('shortIds', []).append(short_id)
+
             f.seek(0)
             json.dump(config, f, indent=4)
             f.truncate()
-            log.info(f"Successfully added user {email} ({user_id}) to {XRAY_CONFIG_PATH}")
+            log.info(f"Successfully added user {email} ({user_id}) with shortId {short_id} to config.")
             return True
     except Exception as e:
         log.error(f"Failed to update Xray config: {e}")
@@ -116,28 +124,28 @@ def get_vless_reality_link(user_uuid: str, short_id: str) -> str:
 @app.post("/get_or_create_key")
 async def get_or_create_key(user_info: dict):
     telegram_id = user_info.get("telegram_id")
-    if not telegram_id:
-        raise HTTPException(status_code=400, detail="telegram_id is required")
+    if not telegram_id: raise HTTPException(status_code=400, detail="telegram_id is required")
 
     db = SessionLocal()
     try:
         existing_user = db.query(User).filter(User.telegram_id == telegram_id).first()
         if existing_user:
             log.info(f"Found existing user: {telegram_id}. Returning their key.")
-            # Генерируем новый short_id даже для старого пользователя, это безопасно
-            short_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
-            return {"key": get_vless_reality_link(existing_user.xray_uuid, short_id), "is_new": False}
+            return {"key": get_vless_reality_link(existing_user.xray_uuid, existing_user.short_id), "is_new": False}
 
         log.info(f"Creating new user for telegram_id: {telegram_id}")
         new_uuid = str(uuid.uuid4())
+        new_short_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+
         new_user = User(
             telegram_id=telegram_id,
             xray_uuid=new_uuid,
+            short_id=new_short_id,  # Сохраняем short_id в БД
             full_name=user_info.get("full_name", "")
         )
         db.add(new_user)
 
-        if not add_user_to_xray_config(user_id=new_uuid, email=f"user_{telegram_id}"):
+        if not add_user_to_xray_config(user_id=new_uuid, short_id=new_short_id, email=f"user_{telegram_id}"):
             db.rollback()
             raise HTTPException(status_code=500, detail="Could not update Xray config.")
 
@@ -148,13 +156,7 @@ async def get_or_create_key(user_info: dict):
 
         db.commit()
         log.info(f"Successfully created new user: {telegram_id}")
-        short_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
-        return {"key": get_vless_reality_link(new_uuid, short_id), "is_new": True}
-
-    except Exception as e:
-        db.rollback()
-        log.error(f"Database error or other issue: {e}")
-        raise HTTPException(status_code=500, detail="An internal error occurred.")
+        return {"key": get_vless_reality_link(new_uuid, new_short_id), "is_new": True}
     finally:
         db.close()
 
