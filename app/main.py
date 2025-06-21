@@ -64,11 +64,8 @@ app = FastAPI()
 
 
 async def restart_xray_container():
-    """Перезапускает сервис Xray через docker-compose."""
-    # Мы находимся в контейнере, который является частью docker-compose проекта.
-    # Мы можем выполнить команду docker-compose restart для другого сервиса.
-    # Указываем путь к нашему compose-файлу, который мы можем найти по WORKDIR
-    command = "docker-compose -f /app/docker-compose.yml restart xray"
+    """Перезапускает контейнер Xray через системный вызов команды docker."""
+    command = f"docker restart {XRAY_CONTAINER_NAME}"
     log.info(f"Executing command: {command}")
     try:
         process = await asyncio.create_subprocess_shell(
@@ -79,15 +76,14 @@ async def restart_xray_container():
         stdout, stderr = await process.communicate()
 
         if process.returncode == 0:
-            log.info(f"Service 'xray' restarted successfully. Output: {stdout.decode().strip()}")
+            log.info(f"Container '{XRAY_CONTAINER_NAME}' restarted successfully. Output: {stdout.decode().strip()}")
             return True
         else:
-            log.error(f"Failed to restart service 'xray'. Exit code: {process.returncode}. Error: {stderr.decode().strip()}")
+            log.error(f"Failed to restart container. Exit code: {process.returncode}. Error: {stderr.decode().strip()}")
             return False
     except Exception as e:
-        log.error(f"Exception while trying to restart service 'xray': {e}")
+        log.error(f"Exception while trying to restart container: {e}")
         return False
-
 
 def add_user_to_xray_config(user_id: str, short_id: str, email: str) -> bool:
     """Добавляет нового пользователя И ЕГО SHORT_ID в JSON-конфигурацию Xray."""

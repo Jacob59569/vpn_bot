@@ -16,7 +16,7 @@ services:
 
   xray:
     image: teddysun/xray
-    # container_name: vpn_xray <-- УДАЛИТЬ
+    container_name: vpn_xray
     volumes:
       - ./xray/config.json:/etc/xray/config.json
     ports:
