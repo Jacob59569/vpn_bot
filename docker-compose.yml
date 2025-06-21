@@ -5,7 +5,7 @@ services:
     build: ./app
     # container_name: vpn_app  <-- УДАЛИТЬ
     environment:
-      - TELEGRAM_TOKEN=ВАШ_ТЕЛЕГРАМ_ТОКЕН
+      - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
     volumes:
       - ./xray/config.json:/app/config.json
       - /var/run/docker.sock:/var/run/docker.sock
