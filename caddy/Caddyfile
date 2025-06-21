@@ -1,29 +1,15 @@
 shieldvpn.ru {
     log
-
-
-    root * /srv/www
-
-
+    root * /srv # Папка с твоим сайтом
     encode zstd gzip
 
-
-    route {
-
-        @grpc header Content-Type application/grpc*
-        handle @grpc {
-            reverse_proxy h2c://vpn_xray:10000 {
-                transport http {
-                    versions 2
-                }
-            }
-        }
-
-
-        handle {
-            file_server
-        }
+    # Ручка для VLESS+gRPC
+    handle_path /vless-grpc* {
+        reverse_proxy h2c://vpn_xray:10000
     }
+
+    # Все остальное - это твой сайт
+    file_server
 
     tls jacob.tokarev@icloud.com
 }

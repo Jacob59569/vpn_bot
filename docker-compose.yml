@@ -23,6 +23,7 @@ services:
     image: teddysun/xray
     container_name: vpn_xray
     volumes:
+      - ./xray_config:/etc/xray
       - ./shared_xray_config:/etc/xray
     ports:
       - "10000:10000"

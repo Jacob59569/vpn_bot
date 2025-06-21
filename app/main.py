@@ -1,7 +1,9 @@
 import os
 import asyncio
 import logging
+import json
 import uuid
+import docker
 from datetime import datetime
 
 # --- Импорты ---
@@ -14,8 +16,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, select
-import aiohttp
+from sqlalchemy import Column, Integer, String, select
 
 # ==========================================================
 #                  КОНФИГУРАЦИЯ
@@ -28,15 +29,16 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 SERVER_ADDRESS = os.getenv("VLESS_SERVER_ADDRESS")
 VPN_PASSWORD = os.getenv("VPN_PASSWORD")
 REALITY_PUBLIC_KEY = os.getenv("REALITY_PUBLIC_KEY")
+REALITY_PRIVATE_KEY = os.getenv("REALITY_PRIVATE_KEY")
 
-# --- Настройки для ключей и API ---
+# --- Настройки ключей и путей ---
 VLESS_GRPC_PORT = 443
 VLESS_GRPC_REMARKS = "ShieldVPN_Standard(gRPC)"
 VLESS_REALITY_PORT = 8443
 VLESS_REALITY_REMARKS = "ShieldVPN_MaxSpeed(REALITY)"
-XRAY_API_URL = "http://xray_alias:62789"
-GRPC_INBOUND_TAG = "vless-grpc"
-REALITY_INBOUND_TAG = "vless-reality"
+XRAY_CONFIG_PATH = "/app/xray_config/config.json"
+REALITY_SNI = "www.yahoo.com"
+REALITY_SHORT_ID = "ca3be9b8"
 
 # ==========================================================
 #                  БАЗА ДАННЫХ
@@ -61,27 +63,46 @@ async def init_db():
 
 
 # ==========================================================
-#                  УПРАВЛЕНИЕ XRAY через API
+#                  УПРАВЛЕНИЕ XRAY
 # ==========================================================
-async def add_user_to_xray(user_uuid: str, email: str):
-    user_proto = {"level": 0, "email": email, "id": user_uuid}
-    api_endpoint = f"{XRAY_API_URL}/xray.app.proxyman.command.AddUserOperation"
+async def update_xray_config_and_restart():
+    """Генерирует полный конфиг из БД и перезапускает Xray."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User))
+        active_users = result.scalars().all()
 
-    async with aiohttp.ClientSession() as session:
-        # Добавляем в gRPC inbound
-        grpc_payload = {"tag": GRPC_INBOUND_TAG, "user": user_proto}
-        resp_grpc = await session.post(api_endpoint, json=grpc_payload)
+    clients = [{"id": user.client_uuid, "email": f"user_{user.telegram_id}"} for user in active_users]
 
-        # Добавляем в REALITY inbound
-        reality_payload = {"tag": REALITY_INBOUND_TAG, "user": user_proto}
-        resp_reality = await session.post(api_endpoint, json=reality_payload)
+    full_config = {
+        "log": {"loglevel": "warning"},
+        "inbounds": [
+            {"listen": "0.0.0.0", "port": 10000, "protocol": "vless", "tag": "vless-grpc",
+             "settings": {"clients": clients, "decryption": "none"},
+             "streamSettings": {"network": "grpc", "security": "none", "grpcSettings": {"serviceName": "vless-grpc"}}},
+            {"listen": "0.0.0.0", "port": 8443, "protocol": "vless", "tag": "vless-reality",
+             "settings": {"clients": clients, "decryption": "none"},
+             "streamSettings": {"network": "tcp", "security": "reality",
+                                "realitySettings": {"show": False, "dest": "yahoo.com:443", "xver": 0,
+                                                    "serverNames": ["yahoo.com"], "privateKey": REALITY_PRIVATE_KEY,
+                                                    "shortIds": [REALITY_SHORT_ID]}}}
+        ],
+        "outbounds": [{"protocol": "freedom"}]
+    }
 
-        if resp_grpc.status == 200 and resp_reality.status == 200:
-            log.info(f"Successfully added user {email} via Xray API.")
-            return True
-        else:
-            log.error(f"Xray API Error: gRPC={await resp_grpc.text()}, REALITY={await resp_reality.text()}")
-            return False
+    try:
+        os.makedirs(os.path.dirname(XRAY_CONFIG_PATH), exist_ok=True)
+        with open(XRAY_CONFIG_PATH, 'w') as f:
+            json.dump(full_config, f, indent=4)
+        log.info(f"Generated new Xray config with {len(clients)} users.")
+
+        client = docker.from_env()
+        container = client.containers.get('vpn_xray')
+        container.restart()
+        log.info("Xray container restarted successfully to apply new config.")
+        return True
+    except Exception as e:
+        log.error(f"Failed to update or reload Xray: {e}")
+        return False
 
 
 # ==========================================================
@@ -95,13 +116,14 @@ async def create_or_get_user_keys(telegram_id: int):
         if not user:
             log.info(f"Creating new user for telegram_id: {telegram_id}")
             client_uuid = str(uuid.uuid4())
-            success = await add_user_to_xray(user_uuid=client_uuid, email=f"user_{telegram_id}")
-            if not success:
-                raise Exception("Could not add user to Xray")
-
             new_user = User(telegram_id=telegram_id, client_uuid=client_uuid)
             db.add(new_user)
             await db.commit()
+
+            # После добавления пользователя в БД, обновляем конфиг Xray
+            success = await update_xray_config_and_restart()
+            if not success:
+                raise Exception("Could not update Xray config")
             uuid_to_use = new_user.client_uuid
         else:
             log.info(f"Found existing user for telegram_id: {telegram_id}")
@@ -157,7 +179,7 @@ async def process_password(message: types.Message, state: FSMContext):
         try:
             grpc_link, reality_link = await create_or_get_user_keys(message.from_user.id)
             response_text = (
-                "✅ Ваши ключи готовы:\n\n"
+                "✅ Ваши ключи готовы!\n\n"
                 "1️⃣ **Стандартный ключ (gRPC):**\n"
                 f"<code>{grpc_link}</code>\n\n"
                 "2️⃣ **Скоростной ключ (REALITY):**\n"
@@ -178,6 +200,8 @@ async def about_bot(message: types.Message):
 
 async def main():
     await init_db()
+    # Генерируем конфиг при старте, чтобы Xray запустился с актуальными пользователями
+    await update_xray_config_and_restart()
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
