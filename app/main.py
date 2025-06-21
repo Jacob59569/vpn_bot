@@ -34,7 +34,7 @@ DATABASE_PATH = "/app/data/users.db"
 REALITY_SERVER_ADDRESS = "shieldvpn.ru"
 REALITY_SERVER_PORT = 443
 REALITY_PUBLIC_KEY = "8PSiSpiSdXQLCGVXszWueRRsqflMboBXBFAx7MDLTjo"  # <-- ВСТАВЬТЕ СГЕНЕРИРОВАННЫЙ PUBLIC KEY
-REALITY_SERVER_NAME = "www.microsoft.com"
+REALITY_SERVER_NAME = "yahoo.com"
 REALITY_REMARKS = "ShieldVPN-Reality"
 
 # ==========================================================
