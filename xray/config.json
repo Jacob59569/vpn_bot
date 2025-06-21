@@ -2,10 +2,30 @@
   "log": {
     "loglevel": "warning"
   },
+
+  "api": {
+    "tag": "api",
+    "services": [
+      "HandlerService"
+    ]
+  },
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["api"],
+        "outboundTag": "api"
+      }
+    ]
+  },
+
   "inbounds": [
     {
+      "listen": "0.0.0.0",
       "port": 10000,
       "protocol": "vless",
+      "tag": "vless-grpc",
       "settings": {
         "clients": [],
         "decryption": "none"
@@ -22,6 +42,7 @@
       "listen": "0.0.0.0",
       "port": 8443,
       "protocol": "vless",
+      "tag": "vless-reality",
       "settings": {
         "clients": [],
         "decryption": "none"
