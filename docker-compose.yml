@@ -10,10 +10,15 @@ services:
       - VLESS_SERVER_ADDRESS=shieldvpn.ru
       - REALITY_PUBLIC_KEY=8PSiSpiSdXQLCGVXszWueRRsqflMboBXBFAx7MDLTjo
     volumes:
-      - ./shared_xray_config:/app/xray_config
+      # Папка для файла базы данных SQLite. Надежно и правильно.
       - ./app/database:/app/database
+      # Общая папка, куда app будет генерировать конфиг для xray
+      - ./shared_xray_config:/app/xray_config
+      # Сокет Docker для управления контейнерами (чтобы перезапускать xray)
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Порт 8000 не нужен, но оставим на будущее для вебхуков
     ports:
-      - "8000:8000"  # для API
+      - "8000:8000"
     networks:
       - vpn_net
     depends_on:
@@ -23,10 +28,8 @@ services:
     image: teddysun/xray
     container_name: vpn_xray
     volumes:
-      - ./xray_config:/etc/xray
       - ./shared_xray_config:/etc/xray
     ports:
-      - "10000:10000"
       - "8443:8443"
     networks:
       vpn_net:
