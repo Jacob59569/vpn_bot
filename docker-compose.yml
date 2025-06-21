@@ -16,6 +16,8 @@ services:
       - "8000:8000"  # для API
     networks:
       - vpn_net
+    depends_on:
+      - xray
 
   xray:
     image: teddysun/xray
