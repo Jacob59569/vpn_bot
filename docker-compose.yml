@@ -6,9 +6,11 @@ services:
     container_name: vpn_app
     environment:
       - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
+      - VPN_PASSWORD=1234
+      - VLESS_SERVER_ADDRESS=shieldvpn.ru
+      - REALITY_PUBLIC_KEY=8PSiSpiSdXQLCGVXszWueRRsqflMboBXBFAx7MDLTjo
     volumes:
-      - ./xray/config.json:/app/config.json
-      - ./app/user_database.json:/app/user_database.json
+      - ./shared_xray_config:/app/xray_config
       - ./app/database:/app/database
     ports:
       - "8000:8000"  # для API
@@ -19,7 +21,7 @@ services:
     image: teddysun/xray
     container_name: vpn_xray
     volumes:
-      - ./xray/config.json:/etc/xray/config.json
+      - ./shared_xray_config:/etc/xray
     ports:
       - "10000:10000"
       - "8443:8443"
