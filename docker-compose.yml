@@ -3,24 +3,22 @@ version: '3.8'
 services:
   app:
     build: ./app
-    container_name: vpn_app
+    # container_name: vpn_app  <-- УДАЛИТЬ
     environment:
-      - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
+      - TELEGRAM_TOKEN=ВАШ_ТЕЛЕГРАМ_ТОКЕН
     volumes:
       - ./xray/config.json:/app/config.json
       - /var/run/docker.sock:/var/run/docker.sock
       - app_data:/app/data
-    # Порт 8000 больше не нужно пробрасывать наружу
     networks:
       - vpn_net
     restart: always
 
   xray:
     image: teddysun/xray
-    container_name: vpn_xray
+    # container_name: vpn_xray <-- УДАЛИТЬ
     volumes:
       - ./xray/config.json:/etc/xray/config.json
-    # Пробрасываем наружу порт 443, который будет слушать Xray
     ports:
       - "443:443"
     networks:
