@@ -1,14 +1,10 @@
-version: '3.8'
-
 services:
   app:
     build: ./app
     container_name: vpn_app
-    environment:
-      - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
-      - VPN_PASSWORD=1234
-      - VLESS_SERVER_ADDRESS=shieldvpn.ru
-      - REALITY_PUBLIC_KEY=8PSiSpiSdXQLCGVXszWueRRsqflMboBXBFAx7MDLTjo
+    restart: always
+    env_file:
+      - .env # Безопасно загружаем все секреты отсюда
     volumes:
       # Папка для файла базы данных SQLite. Надежно и правильно.
       - ./app/database:/app/database
@@ -16,36 +12,40 @@ services:
       - ./shared_xray_config:/app/xray_config
       # Сокет Docker для управления контейнерами (чтобы перезапускать xray)
       - /var/run/docker.sock:/var/run/docker.sock
-      # Порт 8000 не нужен, но оставим на будущее для вебхуков
+    # Порт 8000 не нужен, но оставим на будущее для вебхуков
     ports:
       - "8000:8000"
     networks:
       - vpn_net
     depends_on:
-      - xray
+      - xray # Гарантирует, что xray запустится ПЕРЕД app
 
   xray:
     image: teddysun/xray
     container_name: vpn_xray
+    restart: always
     volumes:
+      # Xray будет читать конфиг из общей папки, которую создает сервис app
       - ./shared_xray_config:/etc/xray
     ports:
+      # Наружу выставлен ТОЛЬКО порт для REALITY.
+      # Порты для gRPC (10000) и API (62789) теперь внутренние.
       - "8443:8443"
     networks:
-      vpn_net:
-        aliases:
-          - xray_alias
+      - vpn_net
 
   caddy:
     image: caddy:2.7.6
     container_name: vpn_caddy
+    restart: always
     ports:
       - "80:80"
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./caddy:/etc/caddy
-      - ./caddy:/srv/www
+      # Явное и чистое монтирование файлов и папок
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/site:/srv # Папка для вашего сайта
       - caddy_data:/data
       - caddy_config:/config
     networks:
