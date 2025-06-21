@@ -3,6 +3,8 @@ import asyncio
 import logging
 import json
 import uuid
+import random
+import string
 from datetime import datetime
 
 # --- Импорты ---
@@ -27,10 +29,12 @@ XRAY_CONFIG_PATH = "/app/config.json"
 XRAY_CONTAINER_NAME = "vpn_xray"
 DATABASE_PATH = "/app/data/users.db"
 
-VLESS_SERVER_ADDRESS = "shieldvpn.ru"
-VLESS_SERVER_PORT = 443
-VLESS_REMARKS = "ShieldVPN"
-VLESS_WS_PATH = "/vless-ws"
+# --- НАСТРОЙКИ ДЛЯ REALITY (ЗАМЕНИТЕ НА СВОИ!) ---
+REALITY_SERVER_ADDRESS = "shieldvpn.ru"
+REALITY_SERVER_PORT = 443
+REALITY_PUBLIC_KEY = "8PSiSpiSdXQLCGVXszWueRRsqflMboBXBFAx7MDLTjo"  # <-- ВСТАВЬТЕ СГЕНЕРИРОВАННЫЙ PUBLIC KEY
+REALITY_SERVER_NAME = "www.microsoft.com"
+REALITY_REMARKS = "ShieldVPN-Reality"
 
 # ==========================================================
 #                  БАЗА ДАННЫХ
@@ -53,7 +57,7 @@ os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
 Base.metadata.create_all(bind=engine)
 
 # ==========================================================
-#                  ЛОГИКА API и VLESS
+#                  ЛОГИКА API и VLESS-REALITY
 # ==========================================================
 app = FastAPI()
 
@@ -98,29 +102,38 @@ def add_user_to_xray_config(user_id: str, email: str) -> bool:
         return False
 
 
-def get_vless_link(user_uuid: str) -> str:
+def get_vless_reality_link(user_uuid: str, short_id: str) -> str:
+    """Формирует VLESS-ссылку для протокола REALITY."""
     return (
-        f"vless://{user_uuid}@{VLESS_SERVER_ADDRESS}:{VLESS_SERVER_PORT}?"
-        f"type=ws&security=tls&path={VLESS_WS_PATH}&host={VLESS_SERVER_ADDRESS}"
-        f"#{VLESS_REMARKS}"
+        f"vless://{user_uuid}@{REALITY_SERVER_ADDRESS}:{REALITY_SERVER_PORT}?"
+        f"security=reality&encryption=none&pbk={REALITY_PUBLIC_KEY}"
+        f"&headerType=none&type=tcp&sni={REALITY_SERVER_NAME}&sid={short_id}"
+        f"#{REALITY_REMARKS}"
     )
 
 
 @app.post("/get_or_create_key")
 async def get_or_create_key(user_info: dict):
     telegram_id = user_info.get("telegram_id")
-    if not telegram_id: raise HTTPException(status_code=400, detail="telegram_id is required")
+    if not telegram_id:
+        raise HTTPException(status_code=400, detail="telegram_id is required")
 
     db = SessionLocal()
     try:
         existing_user = db.query(User).filter(User.telegram_id == telegram_id).first()
         if existing_user:
             log.info(f"Found existing user: {telegram_id}. Returning their key.")
-            return {"key": get_vless_link(existing_user.xray_uuid), "is_new": False}
+            # Генерируем новый short_id даже для старого пользователя, это безопасно
+            short_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+            return {"key": get_vless_reality_link(existing_user.xray_uuid, short_id), "is_new": False}
 
         log.info(f"Creating new user for telegram_id: {telegram_id}")
         new_uuid = str(uuid.uuid4())
-        new_user = User(telegram_id=telegram_id, xray_uuid=new_uuid, full_name=user_info.get("full_name", ""))
+        new_user = User(
+            telegram_id=telegram_id,
+            xray_uuid=new_uuid,
+            full_name=user_info.get("full_name", "")
+        )
         db.add(new_user)
 
         if not add_user_to_xray_config(user_id=new_uuid, email=f"user_{telegram_id}"):
@@ -134,23 +147,30 @@ async def get_or_create_key(user_info: dict):
 
         db.commit()
         log.info(f"Successfully created new user: {telegram_id}")
-        return {"key": get_vless_link(new_uuid), "is_new": True}
+        short_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+        return {"key": get_vless_reality_link(new_uuid, short_id), "is_new": True}
+
+    except Exception as e:
+        db.rollback()
+        log.error(f"Database error or other issue: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred.")
     finally:
         db.close()
 
 
 # ==========================================================
-#                  КОД ТЕЛЕГРАМ-БОТА
+#                  КОД ТЕЛЕГРАМ-БОТА (без изменений)
 # ==========================================================
-bot = Bot(token=TOKEN)
+bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
 
 @dp.message(CommandStart())
 async def command_start_handler(message: types.Message):
-    kb = [[types.InlineKeyboardButton(text="🔑 Получить VLESS ключ", callback_data="get_vless_key")]]
+    kb = [[types.InlineKeyboardButton(text="🔑 Получить REALITY ключ", callback_data="get_vless_key")]]
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
-    await message.answer("Привет! Нажми на кнопку, чтобы получить новый ключ доступа:", reply_markup=keyboard)
+    await message.answer("Привет! Нажми на кнопку, чтобы получить новый ключ доступа (VLESS + REALITY):",
+                         reply_markup=keyboard)
 
 
 @dp.callback_query(F.data == "get_vless_key")

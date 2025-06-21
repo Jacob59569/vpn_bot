@@ -5,17 +5,12 @@ services:
     build: ./app
     container_name: vpn_app
     environment:
-      # ВАЖНО: Замените на ваш реальный токен!
       - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
     volumes:
-      # Монтируем конфиг Xray в контейнер app, чтобы его можно было изменять
       - ./xray/config.json:/app/config.json
-      # Монтируем Docker Socket, чтобы управлять контейнерами изнутри
       - /var/run/docker.sock:/var/run/docker.sock
-      # Создаем volume для хранения файла базы данных
       - app_data:/app/data
-    ports:
-      - "8000:8000"  # для API
+    # Порт 8000 больше не нужно пробрасывать наружу
     networks:
       - vpn_net
     restart: always
@@ -25,30 +20,15 @@ services:
     container_name: vpn_xray
     volumes:
       - ./xray/config.json:/etc/xray/config.json
+    # Пробрасываем наружу порт 443, который будет слушать Xray
     ports:
-      - "10000:10000"
-    networks:
-      - vpn_net
-    restart: always
-
-  caddy:
-    image: caddy:2.7.6
-    container_name: vpn_caddy
-    ports:
-      - "80:80"
       - "443:443"
-    volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
     networks:
       - vpn_net
     restart: always
 
 volumes:
-  caddy_data:
-  caddy_config:
-  app_data: # Объявляем volume для данных приложения
+  app_data:
 
 networks:
   vpn_net:
