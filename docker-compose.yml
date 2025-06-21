@@ -1,62 +1,54 @@
+version: '3.8'
+
 services:
   app:
     build: ./app
     container_name: vpn_app
-    restart: always
-    env_file:
-      - .env # Безопасно загружаем все секреты отсюда
+    environment:
+      # ВАЖНО: Замените на ваш реальный токен!
+      - TELEGRAM_TOKEN=7697602760:AAEdu5NLl2UEZYTuyAit3ImiziiVn_vYppE
     volumes:
-      # Папка для файла базы данных SQLite. Надежно и правильно.
-      - ./app/database:/app/database
-      # Общая папка, куда app будет генерировать конфиг для xray
-      - ./shared_xray_config:/app/xray_config
-      # Сокет Docker для управления контейнерами (чтобы перезапускать xray)
+      # Монтируем конфиг Xray в контейнер app, чтобы его можно было изменять
+      - ./xray/config.json:/app/config.json
+      # Монтируем Docker Socket, чтобы управлять контейнерами изнутри
       - /var/run/docker.sock:/var/run/docker.sock
-    # Порт 8000 не нужен, но оставим на будущее для вебхуков
+      # Создаем volume для хранения файла базы данных
+      - app_data:/app/data
     ports:
-      - "8000:8000"
+      - "8000:8000"  # для API
     networks:
       - vpn_net
-    depends_on:
-      - xray # Гарантирует, что xray запустится ПЕРЕД app
+    restart: always
 
   xray:
     image: teddysun/xray
     container_name: vpn_xray
-    restart: always
     volumes:
-      # Xray будет читать конфиг из общей папки, которую создает сервис app
-      - ./shared_xray_config:/etc/xray
+      - ./xray/config.json:/etc/xray/config.json
     ports:
-      # Наружу выставлен ТОЛЬКО порт для REALITY.
-      # Порты для gRPC (10000) и API (62789) теперь внутренние.
-      - "8443:8443"
+      - "10000:10000"
     networks:
       - vpn_net
+    restart: always
 
   caddy:
     image: caddy:2.7.6
     container_name: vpn_caddy
-    restart: always
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"
     volumes:
-      # Явное и чистое монтирование файлов и папок
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./caddy/site:/srv # Папка для вашего сайта
       - caddy_data:/data
       - caddy_config:/config
     networks:
       - vpn_net
-    depends_on:
-      - xray
-      - app
+    restart: always
 
 volumes:
   caddy_data:
   caddy_config:
+  app_data: # Объявляем volume для данных приложения
 
 networks:
   vpn_net:
