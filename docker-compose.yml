@@ -28,7 +28,9 @@ services:
       - "10000:10000"
       - "8443:8443"
     networks:
-      - vpn_net
+      vpn_net:
+        aliases:
+          - xray_alias
 
   caddy:
     image: caddy:2.7.6

@@ -34,7 +34,7 @@ VLESS_GRPC_PORT = 443
 VLESS_GRPC_REMARKS = "ShieldVPN_Standard(gRPC)"
 VLESS_REALITY_PORT = 8443
 VLESS_REALITY_REMARKS = "ShieldVPN_MaxSpeed(REALITY)"
-XRAY_API_URL = "http://vpn_xray:62789"
+XRAY_API_URL = "http://xray_alias:62789"
 GRPC_INBOUND_TAG = "vless-grpc"
 REALITY_INBOUND_TAG = "vless-reality"
 
