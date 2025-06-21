@@ -2,14 +2,12 @@
   "log": {
     "loglevel": "warning"
   },
-
   "api": {
     "tag": "api",
     "services": [
       "HandlerService"
     ]
   },
-
   "routing": {
     "rules": [
       {
@@ -19,7 +17,6 @@
       }
     ]
   },
-
   "inbounds": [
     {
       "listen": "0.0.0.0",
@@ -58,6 +55,15 @@
           "privateKey": "WDCdXqoRh7xmCDK5ZRkdJc4PrXq9x8N2ZvwFtRFMS34",
           "shortIds": ["ca3be9b8"]
         }
+      }
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 62789,
+      "protocol": "dokodemo-door",
+      "tag": "api",
+      "settings": {
+        "address": "127.0.0.1"
       }
     }
   ],
