@@ -13,6 +13,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from aiogram.client.default import DefaultBotProperties
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.exc import SQLAlchemyError
 import aiohttp
@@ -161,7 +162,7 @@ async def get_or_create_key(user_info: dict):
 # ==========================================================
 #                  КОД ТЕЛЕГРАМ-БОТА (без изменений)
 # ==========================================================
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 
