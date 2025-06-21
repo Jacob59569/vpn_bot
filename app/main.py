@@ -142,7 +142,7 @@ async def get_or_create_key(user_info: dict):
 # ==========================================================
 #                  КОД ТЕЛЕГРАМ-БОТА
 # ==========================================================
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 
