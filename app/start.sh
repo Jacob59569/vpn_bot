@@ -1,5 +1,9 @@
 #!/bin/bash
 
-# Сразу запускаем Telegram-бота. Он будет основной программой.
+# Даем другим контейнерам (особенно xray) время на полный запуск
+echo "Waiting for other services to start..."
+sleep 5
+
+# Теперь запускаем бота
 echo "Starting Telegram bot..."
 python main.py
