@@ -17,6 +17,27 @@
           "serviceName": "vless-grpc"
         }
       }
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 8443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "yahoo.com:443",
+          "xver": 0,
+          "serverNames": ["yahoo.com", "www.yahoo.com"],
+          "privateKey": "WDCdXqoRh7xmCDK5ZRkdJc4PrXq9x8N2ZvwFtRFMS34",
+          "shortIds": ["ca3be9b8"]
+        }
+      }
     }
   ],
   "outbounds": [

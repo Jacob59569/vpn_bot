@@ -32,8 +32,19 @@ API_URL = "http://localhost:8000/generate"
 
 # --- Конфигурация VLESS ---
 VLESS_SERVER_ADDRESS = "shieldvpn.ru"
-VLESS_SERVER_PORT = 443
-VLESS_REMARKS = "ShieldVPN"
+VLESS_GRPC_PORT = 443
+VLESS_GRPC_REMARKS = "ShieldVPN"
+
+
+# --- Настройки для VLESS + TCP + REALITY ---
+VLESS_REALITY_PORT = 8443
+VLESS_REALITY_REMARKS = "ShieldVPN_MaxSpeed(REALITY)"
+REALITY_PUBLIC_KEY = "8PSiSpiSdXQLCGVXszWueRRsqflMboBXBFAx7MDLTjo"
+REALITY_PRIVATE_KEY = "WDCdXqoRh7xmCDK5ZRkdJc4PrXq9x8N2ZvwFtRFMS34"
+REALITY_SNI = "www.yahoo.com"
+REALITY_SHORT_ID = "ca3be9b8" # Можете сгенерировать свой: openssl rand -hex 4
+
+
 # --- ИСПРАВЛЕННЫЙ ПУТЬ ---
 XRAY_CONFIG_PATH = "/app/config.json"  # Путь к конфигу Xray, который мы смонтировали
 USER_DB_PATH = "/app/user_database.json"
@@ -71,22 +82,22 @@ def save_user_db(db):
 
 
 def add_user_to_xray_config(user_uuid: str, email: str):
-    """Добавляет нового пользователя в конфиг Xray и перезапускает сервис."""
+    """ИЗМЕНЕНО: Добавляет пользователя в ОБА inbound'а в конфиге."""
     try:
         with open(XRAY_CONFIG_PATH, 'r+') as f:
             config = json.load(f)
-            inbound_settings = config['inbounds'][0]['settings']
-            if 'clients' not in inbound_settings:
-                inbound_settings['clients'] = []
-
-            # Добавляем нового клиента (мы уже знаем, что его там нет)
             new_client = {"id": user_uuid, "email": email}
-            inbound_settings['clients'].append(new_client)
+
+            # Проходим по всем инбаундам и добавляем клиента
+            for inbound in config.get('inbounds', []):
+                if 'clients' not in inbound.get('settings', {}):
+                    inbound['settings']['clients'] = []
+                inbound['settings']['clients'].append(new_client)
 
             f.seek(0)
             json.dump(config, f, indent=4)
             f.truncate()
-            log.info(f"Successfully added user {email} ({user_uuid}) to xray config.")
+            log.info(f"Successfully added user {email} to ALL inbounds in xray config.")
     except Exception as e:
         log.error(f"Failed to update Xray config file: {e}")
         raise HTTPException(status_code=500, detail="Could not update Xray configuration.")
@@ -99,46 +110,35 @@ def add_user_to_xray_config(user_uuid: str, email: str):
         log.info("Container 'vpn_xray' restarted successfully.")
     except Exception as e:
         log.error(f"Failed to restart xray container: {e}")
-        # Продолжаем, но ключ может быть неактивен
-
-
-def format_vless_link(user_uuid: str):
-    """Форматирует VLESS-ссылку по UUID."""
-    return (
-        f"vless://{user_uuid}@{VLESS_SERVER_ADDRESS}:{VLESS_SERVER_PORT}?"
-        f"type=grpc&security=tls&serviceName=vless-grpc&host={VLESS_SERVER_ADDRESS}"
-        f"#{VLESS_REMARKS}"
-    )
 
 
 @app.post("/generate")
 async def generate_key(user_info: dict):
     telegram_id_str = str(user_info.get("telegram_id"))
-
-    # Загружаем нашу "базу данных"
     user_db = get_user_db()
 
-    # ПРОВЕРКА: есть ли уже ключ у этого пользователя?
     if telegram_id_str in user_db:
         user_uuid = user_db[telegram_id_str]
         log.info(f"User {telegram_id_str} already has a key. Returning existing UUID: {user_uuid}")
-        # Просто возвращаем существующий ключ, ничего не меняя и не перезапуская
-        return format_vless_link(user_uuid)
     else:
-        # СОЗДАНИЕ НОВОГО КЛЮЧА
         log.info(f"User {telegram_id_str} does not have a key. Generating a new one.")
         user_uuid = str(uuid.uuid4())
         email = f"user_{telegram_id_str}"
-
-        # 1. Добавляем пользователя в конфиг Xray и перезапускаем
         add_user_to_xray_config(user_uuid=user_uuid, email=email)
-
-        # 2. Сохраняем связку telegram_id -> vless_uuid в нашу базу
         user_db[telegram_id_str] = user_uuid
         save_user_db(user_db)
 
-        # 3. Возвращаем новый ключ
-        return format_vless_link(user_uuid)
+    # --- ИЗМЕНЕНО: Формируем и возвращаем ДВА ключа ---
+    grpc_link = (f"vless://{user_uuid}@{VLESS_SERVER_ADDRESS}:{VLESS_GRPC_PORT}?"
+                 f"type=grpc&serviceName=vless-grpc&security=tls&sni={VLESS_SERVER_ADDRESS}"
+                 f"#{VLESS_GRPC_REMARKS}")
+
+    reality_link = (f"vless://{user_uuid}@{VLESS_SERVER_ADDRESS}:{VLESS_REALITY_PORT}?"
+                    f"type=tcp&security=reality&fp=firefox&pbk={REALITY_PUBLIC_KEY}"
+                    f"&sni={REALITY_SNI}&sid={REALITY_SHORT_ID}&spx=%2F"
+                    f"#{VLESS_REALITY_REMARKS}")
+
+    return {"grpc_link": grpc_link, "reality_link": reality_link}
 
 
 # ==========================================================
@@ -221,37 +221,35 @@ async def about_bot_handler(message: types.Message):
 
 @dp.callback_query(F.data == "get_vless_key")
 async def get_vless_key_handler(call: types.CallbackQuery):
-    user_id = call.from_user.id
-    user_fullname = call.from_user.full_name
-    log.info(f"User {user_id} ({user_fullname}) clicked the button to get a VLESS key.")
     await call.answer("Генерирую ключ... Пожалуйста, подождите.")
-
-    user_data_for_api = {"telegram_id": user_id, "full_name": user_fullname}
+    user_data_for_api = {"telegram_id": call.from_user.id}
 
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(API_URL, json=user_data_for_api) as response:
                 log.info(f"Internal API request to {API_URL} returned status: {response.status}")
                 if response.status == 200:
-                    vless_key = await response.text()
-                    vless_key = vless_key.strip('"')
+                    # --- ИЗМЕНЕНО: Парсим JSON и форматируем сообщение с ДВУМЯ ключами ---
+                    data = await response.json()
+                    grpc_link = data.get("grpc_link")
+                    reality_link = data.get("reality_link")
+
                     response_text = (
-                        "✅ Ваш новый ключ готов!\n\n"
-                        "Скопируйте его целиком и добавьте в свой клиент:\n\n"
-                        f"<code>{vless_key}</code>"
+                        "✅ Ваши ключи готовы!\n\n"
+                        "1️⃣ **Стандартный ключ (gRPC):**\n"
+                        "Надежный, маскируется под сайт. Используйте, если другие не работают.\n"
+                        f"<code>{grpc_link}</code>\n\n"
+                        "2️⃣ **Скоростной ключ (REALITY):**\n"
+                        "Максимальная производительность и лучший обход блокировок.\n"
+                        f"<code>{reality_link}</code>"
                     )
                     await call.message.answer(response_text)
                 else:
                     error_text = await response.text()
-                    log.error(f"API returned an error. Status: {response.status}, Body: {error_text}")
-                    await call.message.answer("❌ Не удалось сгенерировать ключ. Сервер API вернул ошибку.")
-        except aiohttp.ClientConnectorError as e:
-            log.error(f"Could not connect to the API server at {API_URL}. Error: {e}")
-            await call.message.answer("❌ Ошибка подключения к серверу API.\nПожалуйста, сообщите администратору.")
+                    await call.message.answer(f"❌ Не удалось сгенерировать ключ. Ошибка: {error_text}")
         except Exception as e:
-            log.exception(f"An unexpected error occurred while processing request from user {user_id}: {e}")
-            await call.message.answer("❌ Произошла непредвиденная ошибка. Попробуйте позже.")
-
+            log.exception(f"An critical error occurred: {e}")
+            await call.message.answer("❌ Произошла критическая ошибка. Сообщите администратору.")
 
 # --- Функция запуска БОТА ---
 async def run_bot():
