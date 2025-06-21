@@ -1,17 +1,27 @@
+# Используем базовый образ Python 3.11-slim
 FROM python:3.11-slim
 
-# Устанавливаем системные зависимости, необходимые для Docker CLI
+# Устанавливаем все системные зависимости одной командой,
+# чтобы уменьшить количество слоев и избежать проблем.
+# gnupg - содержит утилиту gpg
+# curl - для скачивания
+# ca-certificates - для HTTPS
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    gnupg \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем Docker CLI
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+# Добавляем официальный репозиторий Docker
+RUN install -m 0755 -d /etc/apt/keyrings
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+RUN chmod a+r /etc/apt/keyrings/docker.asc
 RUN echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
   tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Устанавливаем Docker CLI
 RUN apt-get update && apt-get install -y docker-ce-cli
 
 # Устанавливаем Python-зависимости
